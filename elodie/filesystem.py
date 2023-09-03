@@ -490,14 +490,18 @@ class FileSystem(object):
         if(checksum is None):
             log.info('Could not get checksum for %s.' % _file)
             return None
+        
+        # checksum_file is the file of the elodie-processed file we would expect _file
+        # to be converted to iff elodie has already ingested this file. 
+        checksum_file = db.get_hash(checksum)
 
         # If duplicates are not allowed then we check if we've seen this file
         #  before via checksum. We also check that the file exists at the
         #   location we believe it to be.
         # If we find a checksum match but the file doesn't exist where we
         #  believe it to be then we write a debug log and proceed to import.
-        checksum_file = db.get_hash(checksum)
-        if(allow_duplicate is False and checksum_file is not None):
+        file_exists_in_db = checksum_file is not None
+        if(allow_duplicate is False and file_exists_in_db):
             if(os.path.isfile(checksum_file)):
                 log.info('%s already at %s.' % (
                     _file,
@@ -515,6 +519,10 @@ class FileSystem(object):
         move = False
         if('move' in kwargs):
             move = kwargs['move']
+        
+        dry_run = False 
+        if('dry_run' in kwargs):
+            dry_run = kwargs['dry_run']
 
         allow_duplicate = False
         if('allowDuplicate' in kwargs):
@@ -532,7 +540,7 @@ class FileSystem(object):
             log.info('Original checksum returned None for %s. Skipping...' %
                      _file)
             return
-
+        
         # Run `before()` for every loaded plugin and if any of them raise an exception
         #  then we skip importing the file and log a message.
         plugins_run_before_status = self.plugins.run_all_before(_file, destination)
@@ -553,6 +561,10 @@ class FileSystem(object):
             print('Final source and destination path should not be identical')
             return
 
+        if dry_run:
+            print(f"Media ({_file}) about to be ingested to {dest_path}")
+            return 
+        
         self.create_directory(dest_directory)
 
         # exiftool renames the original file by appending '_original' to the

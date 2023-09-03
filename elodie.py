@@ -36,7 +36,7 @@ from elodie import constants
 
 FILESYSTEM = FileSystem()
 
-def import_file(_file, destination, album_from_folder, trash, allow_duplicates):
+def import_file(_file, destination, album_from_folder, trash, allow_duplicates, dry_run=False):
     
     _file = _decode(_file)
     destination = _decode(destination)
@@ -64,12 +64,19 @@ def import_file(_file, destination, album_from_folder, trash, allow_duplicates):
     if album_from_folder:
         media.set_album_from_folder()
 
+    # The logic below can cause errors with bad filenames. Just logging the current file name here
+    # so that the problematic file can be inspected.
+    log.info('Currently on %s' % _file)
+
     dest_path = FILESYSTEM.process_file(_file, destination,
-        media, allowDuplicate=allow_duplicates, move=False)
+        media, allowDuplicate=allow_duplicates, move=False, dry_run=dry_run)
     if dest_path:
         log.all('%s -> %s' % (_file, dest_path))
     if trash:
-        send2trash(_file)
+        if dry_run:
+            log.info("DRY trashing file: %s", _file)
+        else:
+            send2trash(_file)
 
     return dest_path or None
 
@@ -101,8 +108,10 @@ def _batch(debug):
               help='Override the value in constants.py with True.')
 @click.option('--exclude-regex', default=set(), multiple=True,
               help='Regular expression for directories or files to exclude.')
+@click.option('--dry-run', default=False, is_flag=True,
+              help='Prints cache hits and operations without any file manipulations.')
 @click.argument('paths', nargs=-1, type=click.Path())
-def _import(destination, source, file, album_from_folder, trash, allow_duplicates, debug, exclude_regex, paths):
+def _import(destination, source, file, album_from_folder, trash, allow_duplicates, debug, exclude_regex, dry_run, paths):
     """Import files or directories by reading their EXIF and organizing them accordingly.
     """
     constants.debug = debug
@@ -138,7 +147,7 @@ def _import(destination, source, file, album_from_folder, trash, allow_duplicate
 
     for current_file in files:
         dest_path = import_file(current_file, destination, album_from_folder,
-                    trash, allow_duplicates)
+                    trash, allow_duplicates, dry_run)
         result.append((current_file, dest_path))
         has_errors = has_errors is True or not dest_path
 
@@ -332,7 +341,7 @@ def _update(album, location, time, title, paths, debug):
                 updated_media.get_metadata()
                 updated_media.set_metadata_basename(
                     original_base_name.replace('-%s' % original_title, ''))
-
+                
             dest_path = FILESYSTEM.process_file(current_file, destination,
                 updated_media, move=True, allowDuplicate=True)
             log.info(u'%s -> %s' % (current_file, dest_path))
